@@ -9,7 +9,7 @@ Frontend's main features are:
 
 + View the satellites signal levels
 + View the base location on a map
-+ Detect and configure the Gnss receiver (F9P)
++ Detect and configure the Gnss receiver (Ublox F9P or Septentrio Mosaic-X5)
 + Start/stop various services (Sending data to a Ntrip caster, internal Ntrip caster, Rtcm server, Sending Rtcm stream on a radio link, Log raw data to files)
 + Edit the services settings
 + Convert raw data to Rinex
@@ -27,7 +27,7 @@ Frontend's main features are:
 Other images are available in the ./images folder.
 
 ## Ready to flash release:
-A ready to flash image is available for Orange Pi Zero SBC : [Armbian_RTKBase](https://github.com/Stefal/build/releases/latest)
+A ready to flash image is available for Orange Pi Zero, Orange Pi Zero 2, Orange Pi Zero 3 SBC : [Armbian_RTKBase](https://github.com/Stefal/build/releases/latest)
 
 If you use a Raspberry Pi, thanks to [jancelin](https://github.com/jancelin), you can download a ready to flash iso file [here](https://github.com/jancelin/pi-gen/releases/latest).
 
@@ -52,7 +52,7 @@ If you use a Raspberry Pi, thanks to [jancelin](https://github.com/jancelin), yo
    If you don't already know your base precise coordinates, it's time to read one of these tutorials:
    - [rtklibexplorer - Post-processing RTK - for single and dual frequency receivers](https://rtklibexplorer.wordpress.com/2020/02/05/rtklib-tips-for-using-a-cors-station-as-base/)
    - [rtklibexplorer - PPP - for dual frequency receivers](https://rtklibexplorer.wordpress.com/2017/11/23/ppp-solutions-with-the-swiftnav-piksi-multi/)
-   - [Centipede documentation (in french)](https://jancelin.github.io/docs-centipedeRTK/docs/base/positionnement.html)
+   - [Centipede documentation (in french)](https://docs.centipede.fr/docs/base/positionnement.html)
 
 ## Manual installation: 
 The `install.sh` script can be used without the `--all` option to split the installation process into several different steps:
@@ -110,12 +110,12 @@ The `install.sh` script can be used without the `--all` option to split the inst
                              Install gpsd and chrony to set date and time
                              from the gnss receiver.
     
-            -e | --detect-usb-gnss
-                             Detect your GNSS receiver. It works only with usb-connected receiver like ZED-F9P.
+            -e | --detect-gnss
+                             Detect your GNSS receiver. It works only with receiver like ZED-F9P.
     
             -n | --no-write-port
                              Doesn'\''t write the detected port inside settings.conf.
-                             Only relevant with --detect-usb-gnss argument.
+                             Only relevant with --detect-gnss argument.
     
             -c | --configure-gnss
                              Configure your GNSS receiver.
@@ -126,7 +126,9 @@ The `install.sh` script can be used without the `--all` option to split the inst
             -h | --help
                               Display this help message.
    ```
+
 So, if you really want it, let's go for a manual installation with some explanations:
+
 1. Install dependencies with `sudo ./install.sh --dependencies`, or do it manually with:
    ```bash
     sudo apt update
@@ -138,7 +140,7 @@ So, if you really want it, let's go for a manual installation with some explanat
 
       ```bash
       cd ~
-      wget -qO - https://github.com/rtklibexplorer/RTKLIB/archive/refs/tags/b34g.tar.gz | tar -xvz
+      wget -qO - https://github.com/rtklibexplorer/RTKLIB/archive/refs/tags/b34j.tar.gz | tar -xvz
       ```
 
    + compile and install str2str:
@@ -216,18 +218,13 @@ So, if you really want it, let's go for a manual installation with some explanat
       sudo systemctl enable gpsd
    ```
 
-1. Connect your gnss receiver to raspberry pi/orange pi/.... with usb or uart, and check which com port it uses (ttyS1, ttyAMA0, something else...). If it's a U-Blox usb receiver, you can use `sudo ./install.sh --detect-usb-gnss`. Write down the result, you may need it later.
+1. Connect your gnss receiver to raspberry pi/orange pi/.... with usb or uart, and check which com port it uses (ttyS1, ttyAMA0, something else...). If it's a U-Blox F9P receiver (usb or uart) or a Septentrio Mosaic-X5 (usb), you can use `sudo ./install.sh --detect-gnss`. Write down the result, you may need it later.
 
 1. If you didn't have already configure your gnss receiver, you must set it to output raw data:
    
-   If it's a U-Blox ZED-F9P (usb), you can use 
+   If it's a U-Blox ZED-F9P (usb or uart), or a Septentrio Mosaic-X5 (usb) you can use 
    ```bash
-   sudo ./install.sh --detect-usb-gnss --configure-gnss
-   ```
-
-   If it's a U-Blox ZED-F9P (uart), you can use this command (change the ttyS1 and 115200 value if needed)):
-   ```bash
-   rtkbase/tools/set_zed-f9p.sh /dev/ttyS1 115200 rtkbase/receiver_cfg/U-Blox_ZED-F9P_rtkbase.cfg
+   sudo ./install.sh --detect-gnss --configure-gnss
    ```
      
    If you need to use a config tool from another computer (like U-center), you can use `socat`:
@@ -264,6 +261,8 @@ RTKBase use several RTKLIB `str2str` instances started with `run_cast.sh` as sys
 The web GUI is available when the `rtkbase_web` service is running.
 
 ## Advanced:
++ Offline base station without U-Blox receiver, how to get date and time:
+If gpsd can't understand the raw data from your gnss receiver, you can enable the raw2nmea service. It will convert the raw data to the tcp port set in `settings.conf` (nmea_port) and gpsd will use it to feed chrony. `systemctl enable --now rtkbase_raw2nmea`
 + Aerial images:
 The default map background is OpenStreetMap, but you can switch to a worldwide aerial layer if you have a Maptiler key. To enable this layer, create a free account on [Maptiler](https://www.maptiler.com/), create a key and add it to `settings.conf` inside the `[general]` section:
 `maptiler_key=your_key`
@@ -276,7 +275,7 @@ If you want to install RTKBase from the dev branch, you can do it with these com
 cd ~
 wget https://raw.githubusercontent.com/Stefal/rtkbase/dev/tools/install.sh -O install.sh
 chmod +x install.sh
-sudo ./install.sh --alldev dev
+sudo ./install.sh --all repo --rtkbase-repo dev
 ```
 
 ## Other usages:
@@ -296,7 +295,7 @@ A gnss receiver with a timepulse output is a very accurate [stratum 0](https://e
 
 + Set gpsd and chrony to use PPS
 
-   + gpsd: comment the `DEVICE` line in `/etc/defaut/gpsd` and uncomment `#DEVICES="tcp:\\127.0.0.1:5015 \dev\pps0`
+   + gpsd: comment the `DEVICE` line in `/etc/defaut/gpsd` and uncomment `#DEVICES="tcp:\\127.0.0.1:5015 \dev\pps0`. Edit the port if you use the rtkbase_raw2nmea service.
 
    + chrony: inside `/etc/chrony/chrony.conf` uncomment the refclock pps line  and add noselect to the 'refclock SHM 0`. You should have something like this:
    ```
@@ -326,6 +325,9 @@ A gnss receiver with a timepulse output is a very accurate [stratum 0](https://e
       ^- kalimantan.ordimatic.net      3   6   177    16    -27ms[  -27ms] +/-   64ms
 
    ```
+## Requirements:
+Debian base distro >= 11 (Bullseye)
+Python >= 3.8
 
 ## History:
 See the [changelog](./CHANGELOG.md)

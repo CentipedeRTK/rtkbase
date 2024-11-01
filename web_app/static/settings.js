@@ -79,7 +79,7 @@ $(document).ready(function () {
     // View/hide password buttons for: Ntrip A, Ntrip B and Local caster
     document.querySelectorAll(".input-group-append").forEach(function(e) {
         var name = e.querySelector("button").id.replace("_button", "");
-        if (!["svr_pwd_A", "svr_pwd_B", "local_ntripc_pwd"].includes(name))
+        if (!["svr_pwd_A", "svr_pwd_B", "local_ntripc_pwd", "rtcm_client_pwd"].includes(name))
             return;
 
         var button = $("#" + name + "_button");
@@ -228,7 +228,7 @@ $(document).ready(function () {
             socket.emit("services switch", {"name" : "local_ntrip_caster", "active" : switchStatus});         
         })
 
-        // ####################  RTCM server service Switch #########################
+        // ####################  RTCM TCP server service Switch #########################
 
         var rtcmSvrSwitch = $('#rtcm_svr-switch');
         // set the switch to on/off depending of the service status
@@ -325,17 +325,19 @@ $(document).ready(function () {
 
     // ############### HANDLE DETECT GNSS ################
 
-    $('#detect_receiver_button').on("click", function (){
-        detectApplyBtnElt.innerText = "Apply";
-        detectApplyBtnElt.setAttribute('disabled', '');
-        detectApplyBtnElt.removeAttribute('data-dismiss');
-        socket.emit("detect_receiver", {"then_configure" : false});
-    });
-   
     var detectModalElt = document.getElementById('detectModal');
     var detectBodyElt = detectModalElt.querySelector('.modal-body > p');
     var detectApplyBtnElt = detectModalElt.querySelector('#apply-button');
     var detectCancelBtnElt = detectModalElt.querySelector('#cancel-button');
+
+    $('#detect_receiver_button').on("click", function (){
+        detectApplyBtnElt.innerText = "Apply";
+        detectApplyBtnElt.setAttribute('disabled', '');
+        detectApplyBtnElt.removeAttribute('data-dismiss');
+        detectBodyElt.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Detecting GNSS receiver...';
+        socket.emit("detect_receiver", {"then_configure" : false});
+        $('#detectModal').modal();
+    });
 
     socket.on("gnss_detection_result", function(msg) {
         // open modal box with detection result and asking for configuration if detection is a success and a u-blox receiver
@@ -346,12 +348,14 @@ $(document).ready(function () {
             detectBodyElt.innerHTML = '<b>' + response['gnss_type'] + '</b>' + ' detected on ' + '<b>' + response['port'] + '</b>' + '<br>' + '<br>' + 'Do you want to apply?';
             detectApplyBtnElt.onclick = function (){
                 document.querySelector('#com_port').value = response['port'].replace(/^\/dev\//, '');
+                document.querySelector('#com_port_settings').value = response['port_speed'] + ':8:n:1';
                 // NEW METHOD from https://stackoverflow.com/questions/35154348/trigger-form-submission-with-javascript
                 document.getElementById("main").dispatchEvent(new SubmitEvent('submit', {cancelable: true}));
                 if (response['then_configure']) {
                     // We need to wait for the service stop/restart after the previous click on form save button.
                     // Yes, it's dirty...
-                    setTimeout(() => { document.querySelector('#configure_receiver_button').click(); }, 2000);
+                    //setTimeout(() => { document.querySelector('#configure_receiver_button').click(); }, 2000);
+                    document.querySelector('#configure_receiver_button').click();
                 }
                 // detectBodyElt.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Configuring GNSS receiver...';
                 // detectApplyBtnElt.setAttribute('disabled', '');
@@ -359,7 +363,7 @@ $(document).ready(function () {
             detectApplyBtnElt.removeAttribute('disabled');
         } else {
             detectApplyBtnElt.setAttribute('disabled', '');
-            detectBodyElt.innerHTML = 'No USB GNSS receiver detected';
+            detectBodyElt.innerHTML = 'No GNSS receiver detected';
             // TODO add a way to send the configuration even though the receiver isn't detected. It could be useful for F9P connected with Uart.
             //detectBodyElt.innerHTML = 'No GNSS receiver detected. <br> would you still like to try to configure the receiver?';
             //detectApplyBtnElt.onclick = function (){
@@ -369,7 +373,6 @@ $(document).ready(function () {
             //};
             //detectApplyBtnElt.removeAttribute('disabled');
         }
-        $('#detectModal').modal();
     })
 
     // ############### HANDLE CONFIGURE GNSS ################
@@ -385,14 +388,17 @@ $(document).ready(function () {
     })
     socket.on("gnss_configuration_result", function(msg) {
         response = JSON.parse(msg);
+        console.log(response);
         detectApplyBtnElt.removeAttribute('disabled');
         detectApplyBtnElt.setAttribute('data-dismiss', 'modal');
         detectApplyBtnElt.innerText = "Close";
         if (response['result'] === 'success') {
-            detectBodyElt.innerHTML = "GNSS receiver successfully configured";
+            detectBodyElt.innerHTML = "GNSS receiver successfully configured!";
             detectApplyBtnElt.removeAttribute('data-dismiss');
             detectApplyBtnElt.onclick = function() {
-                window.location.reload();
+                // window.location.reload();
+                // looks like this way works better :
+                location.href = document.URL.replace(/#$/, '');
             }
         } else {
             detectBodyElt.innerHTML = "GNSS receiver configuration failed"
@@ -402,9 +408,11 @@ $(document).ready(function () {
     // ############### HANDLE DETECT/CONFIGURE GNSS ################
     $('#detect_and_configure_receiver_button').on("click", function (){
         detectApplyBtnElt.innerText = "Apply then configure";
+        detectBodyElt.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Detecting GNSS receiver...';
         detectApplyBtnElt.setAttribute('disabled', '');
         detectApplyBtnElt.removeAttribute('data-dismiss');
         detectApplyBtnElt.onclick = function (){}; //remove the previous attached event
+        $('#detectModal').modal();
         socket.emit("detect_receiver" ,{"then_configure" : true});
     });
 
@@ -436,9 +444,27 @@ $(document).ready(function () {
             $("#updateModal .modal-title").text("No Update available!");
             $("#updateModal .modal-body").text("We're working on it. Come back later!");
             $("#updateModal").modal();
-        }       
-    })
-      
+        }
+        // check if url contains update=manual parameter to display the input form
+        const queryString = window.location.search;
+        const urlParams = new URLSearchParams(queryString);
+        if (urlParams.get('update') === 'manual' ) {
+            $("#updateModal .modal-body").append('<h3>Manual Update: </h3><form method="POST" action="" enctype="multipart/form-data"> <p><input type="file" name="file"></p><p><input id="submit-button" type="submit" value="Submit"></p></form>');
+            const upd_formElt = document.querySelector('#updateModal div.modal-body form');
+            upd_formElt.addEventListener('submit', handleFileSubmit);
+            function handleFileSubmit(event) {
+                console.log('inside function handlefilesubmit');
+                event.preventDefault;
+                fetch(upd_formElt.action, {
+                    method: "post",
+                    // body: new URLSearchParams(new FormData(form)) // for application/x-www-form-urlencoded
+                    body: new FormData(upd_formElt) // for multipart/form-data
+                });
+                $("#updateModal .modal-body").html('<span class="spinner-border spinner-border-sm"></span> Updating...');
+            };
+        }
+    });
+    
     $("#start-update-button").on("click", function () {
         //$("#updateModal .modal-title").text(("Installing update"));
         socket.emit("update rtkbase");
@@ -461,11 +487,36 @@ $(document).ready(function () {
         }
     })
 
+    socket.on("updating_rtkbase_stopped", function(msg) {
+        response = JSON.parse(msg);
+        console.log("mgs: " + response.error)
+        $("#updateModal .modal-title").text("Error !");
+        $("#updateModal .modal-body").text("");
+        for (line of response.error) {
+            $("#updateModal .modal-body").append("<p>" + line + "</p>");
+        }
+        $("#start-update-button").html('Update');
+        $("#start-update-button").prop("disabled", true);
+        $("#cancel-button").prop("disabled", false);
+    })
+
     socket.on("updating_rtkbase", function() {
         $("#updateModal .modal-body").text("Please wait...Updating...");
-        update_countdown(600, 0);
+        //update_countdown(1200, 0);
     })
     
+    socket.on("update_successful", function() {
+            console.log("update successful");
+            $("#updateModal .modal-body").text("Update Successful!");
+            $("#start-update-button").html('Refresh');
+            $("#start-update-button").prop("disabled", false);
+            $("#start-update-button").off("click");
+            $("#start-update-button").on("click", function() {
+                location.reload();
+            });
+            $("#updateModal").modal();
+    });
+
     function update_countdown(remaining, count) {
         if(remaining === 0)
             location.reload();
@@ -663,7 +714,7 @@ $(document).ready(function () {
         $(this).prop("disabled", true);
         $("#reboot-cancel-button").prop("disabled", true);
         socket.emit("reboot device");
-        reboot_countdown(60, 0);
+        reboot_countdown(90, 0);
     })
 
     function reboot_countdown(remaining, count) {
